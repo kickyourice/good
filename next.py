@@ -6,11 +6,13 @@ import sqlalchemy
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdate
+from playhouse.migrate import *
 
 from peewee import *
 
-base = r'D:\\M\\A故障总结\\自己故障\\A32A33\\00\\立项\\完成译码\\0419\\output\\'
+# base = r'D:\\M\\A故障总结\\自己故障\\A32A33\\00\\立项\\完成译码\\0419\\output\\'
 # base = r'D:\\M\\A故障总结\\自己故障\\A32A33\\00\\立项\\完成译码\\0408-0418\\output\\'
+base = r'D:\\M\\A故障总结\\自己故障\\A32A33\\00\\立项\\完成译码\\test\\'
 # base = '/Users/wm/M/A故障总结/自己故障/A32A33/00/立项/完成译码/test/'
 ENG_1 = 1
 ENG_2 = 2
@@ -21,14 +23,22 @@ db = MySQLDatabase(database='qar_mon',
                    password='root')
 
 
-class BaseModel(Model):
+class My_ac(Model):
+    class Meta:
+        database = db
+
+    ac_num = CharField(max_length=6, primary_key=True)
+    eng_type = CharField()
+    wireless_version = IntegerField()
+    pc_version = IntegerField()
+
+
+class Ac_mon(Model):
     class Meta:
         database = db
         primary_key = CompositeKey('ac_num', 'take_off_datetime')
 
-
-class My_ac(BaseModel):
-    ac_num = CharField(max_length=45)
+    ac_num = ForeignKeyField(My_ac, backref='data')
     take_off_datetime = DateTimeField()
     apu_oil_temp_max = IntegerField()
     eng1_prv_bleed_press_mean = FloatField()
@@ -45,9 +55,18 @@ class My_ac(BaseModel):
     n2_down_time_sum = IntegerField()
     r1_down_time_sum = IntegerField()
     r2_down_time_sum = IntegerField()
+    eng1_trans_pr = FloatField(default=None)
+    eng2_trans_pr = FloatField(default=None)
 
 
-db.create_tables([My_ac])
+db.create_tables([My_ac, Ac_mon])
+
+
+# trans_pr = FloatField(default=None)
+# migrator = MySQLMigrator(db)
+# migrate(
+#     migrator.add_column('Ac_mon', 'trans_pr', trans_pr)
+# )
 
 
 def get_file_names(base):
@@ -72,6 +91,7 @@ def get_apu_oil_temp_max(df):
     apu_oil_temp_max = df['APU_OIL_TEMP'].max()
     return apu_oil_temp_max
 
+
 def store_data(base):
     for full_name in get_file_names(base):
         components = full_name.split('_')
@@ -88,12 +108,12 @@ def store_data(base):
         eng1_prv_bleed_press_mean = get_prv_bleed_press_mean(df, ENG_1)
         eng2_prv_bleed_press_mean = get_prv_bleed_press_mean(df, ENG_2)
         take_off_datetime = get_take_off_datetime(df)
-        My_ac.create(ac_num=ac_num, \
-                     apu_oil_temp_max=apu_oil_temp_max, \
-                     take_off_datetime=take_off_datetime, \
-                     eng1_prv_bleed_press_mean=eng1_prv_bleed_press_mean, \
-                     eng2_prv_bleed_press_mean=eng2_prv_bleed_press_mean, \
-                     **get_landing_gear_time(df))
+        Ac_mon.create(ac_num=ac_num, \
+                      apu_oil_temp_max=apu_oil_temp_max, \
+                      take_off_datetime=take_off_datetime, \
+                      eng1_prv_bleed_press_mean=eng1_prv_bleed_press_mean, \
+                      eng2_prv_bleed_press_mean=eng2_prv_bleed_press_mean, \
+                      **get_landing_gear_time(df))
 
 
 def get_landing_gear_time(df):
@@ -101,36 +121,36 @@ def get_landing_gear_time(df):
     sel_down_first_df = df[df.index == (df[(df.LDG_SELUP2 == 'UP')].index[-1] + 1)]
 
     l1_lock_up_first_df = df[(df.LDG_SELDW2 == 'NOT DOWN') & (df.GEAR_LH_NUP_L1 == 'LOCKED UP') & (
-                df.AIR_GROUND == 'AIR')][0:1]
+            df.AIR_GROUND == 'AIR')][0:1]
     l2_lock_up_first_df = df[(df.LDG_SELDW2 == 'NOT DOWN') & (df.GEAR_LH_NUP_L2 == 'LOCKED UP') & (
-                df.AIR_GROUND == 'AIR')][0:1]
+            df.AIR_GROUND == 'AIR')][0:1]
     n1_lock_up_first_df = df[(df.LDG_SELDW2 == 'NOT DOWN') & (df.GEAR_NS_NUP_L1 == 'LOCKED UP') & (
-                df.AIR_GROUND == 'AIR')][0:1]
+            df.AIR_GROUND == 'AIR')][0:1]
     n2_lock_up_first_df = df[(df.LDG_SELDW2 == 'NOT DOWN') & (df.GEAR_NS_NUP_L2 == 'LOCKED UP') & (
-                df.AIR_GROUND == 'AIR')][0:1]
+            df.AIR_GROUND == 'AIR')][0:1]
     r1_lock_up_first_df = df[(df.LDG_SELDW2 == 'NOT DOWN') & (df.GEAR_RH_NUP_L1 == 'LOCKED UP') & (
-                df.AIR_GROUND == 'AIR')][0:1]
+            df.AIR_GROUND == 'AIR')][0:1]
     r2_lock_up_first_df = df[(df.LDG_SELDW2 == 'NOT DOWN') & (df.GEAR_RH_NUP_L2 == 'LOCKED UP') & (
-                df.AIR_GROUND == 'AIR')][0:1]
+            df.AIR_GROUND == 'AIR')][0:1]
 
     l1_lock_down_first_df = df[
         df.index == (df[(df.LDG_SELUP2 == 'NOT UP') & (df.GEAR_LH_DWLK1 == 'NOT LK DN') & (
-                    df.AIR_GROUND == 'AIR')].index[-1] + 1)]
+                df.AIR_GROUND == 'AIR')].index[-1] + 1)]
     l2_lock_down_first_df = df[
         df.index == (df[(df.LDG_SELUP2 == 'NOT UP') & (df.GEAR_LH_DWLK2 == 'NOT LK DN') & (
-                    df.AIR_GROUND == 'AIR')].index[-1] + 1)]
+                df.AIR_GROUND == 'AIR')].index[-1] + 1)]
     n1_lock_down_first_df = df[
         df.index == (df[(df.LDG_SELUP2 == 'NOT UP') & (df.GEAR_NS_DWLK1 == 'NOT LK DN') & (
-                    df.AIR_GROUND == 'AIR')].index[-1] + 1)]
+                df.AIR_GROUND == 'AIR')].index[-1] + 1)]
     n2_lock_down_first_df = df[
         df.index == (df[(df.LDG_SELUP2 == 'NOT UP') & (df.GEAR_NS_DWLK2 == 'NOT LK DN') & (
-                    df.AIR_GROUND == 'AIR')].index[-1] + 1)]
+                df.AIR_GROUND == 'AIR')].index[-1] + 1)]
     r1_lock_down_first_df = df[
         df.index == (df[(df.LDG_SELUP2 == 'NOT UP') & (df.GEAR_RH_DWLK1 == 'NOT LK DN') & (
-                    df.AIR_GROUND == 'AIR')].index[-1] + 1)]
+                df.AIR_GROUND == 'AIR')].index[-1] + 1)]
     r2_lock_down_first_df = df[
         df.index == (df[(df.LDG_SELUP2 == 'NOT UP') & (df.GEAR_RH_DWLK2 == 'NOT LK DN') & (
-                    df.AIR_GROUND == 'AIR')].index[-1] + 1)]
+                df.AIR_GROUND == 'AIR')].index[-1] + 1)]
 
     def get_datetime(df):
         d = (df.DATE.iloc[0] + ' ' + df.Time.iloc[0]).strip()
